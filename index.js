@@ -37,7 +37,7 @@ client.on("ready",() => {
   const table = sql.prepare("SELECT count(*) FROM sqlite_master WHERE type='table' AND name = 'scores';").get();
   if (!table["count(*)"]) {
     //If the table ain't there, create it and set it up properly
-    sql.prepare("CREATE TABLE scores (id TEXT PRIMARY KEY, user TEXT, guild TEXT, points INTEGER, level INTEGER);").run();
+    sql.prepare("CREATE TABLE scores (id TEXT PRIMARY KEY, user TEXT, guild TEXT, points INTEGER, level INTEGER, activityLevel INTEGER);").run();
     //make sure the row ID is always unique and unindexed
     sql.prepare("CREATE UNIQUE INDEX idx_scores_id ON scores (id);").run();
     sql.pragma("synchronous = 1");
@@ -45,6 +45,7 @@ client.on("ready",() => {
   }
 
   //prepared to get and store point data
+  client.addColumn = sql.prepare("ALTER TABLE scores ADD COLUMN activityLevel INTEGER");
   client.getScore = sql.prepare("SELECT * FROM scores WHERE user = ? AND guild = ?");
   client.setScore = sql.prepare("INSERT OR REPLACE INTO scores (id, user, guild, points, level) VALUES (@id, @user, @guild, @points, @level);");
 });
@@ -70,11 +71,13 @@ client.on("message", message => {
   //z.startFold - user filter
   if (!message.content.startsWith(prefix)|| message.author === client.user || message.author.bot || !message.guild) return;
   //z.endFold
-  //z.startFold - define roles
+  //z.startFold - define things
   const modRoles = message.guild.roles.get("599162538541711361").id;
   const pokeRole = message.guild.roles.get("615371237970935809");
   const pornRole = message.guild.roles.get("616736785682399248");
   const muteRole = message.guild.roles.get("615598648931123200");
+
+  const leaderboardChannel = client.channels.get("625359487141937154");
   //z.endFold
   //z.startFold - defining arguments
   //argument variables
@@ -88,6 +91,7 @@ client.on("message", message => {
   if (!score) {
     score = { id: `${message.guild.id}-${message.author.id}`, user: message.author.id, guild: message.guild.id, points: 0, level: 1};
   }
+  score.activityLevel++;
   const curLevel = Math.floor(0.1 * Math.sqrt(score.points));
   if (score.level < curLevel) {
     score.level++;
@@ -116,6 +120,27 @@ client.on("message", message => {
 
       return client.users.get(mention);
     } //channels
+  }
+  //z.endFold
+  //z.startFold - leaderboard
+  function leaderboard() {
+    let leaderboardEmbed = new Discord.RichEmbed().setColor(0x000000)
+    .setAuthor("Top 10 Scoring Players!", client.user.avatarURL);
+    //creates variable equal to an array that lists the top 10 scorers.
+    const top10 = sql.prepare("SELECT * FROM scores WHERE guild = ? ORDER BY points DESC LIMIT 10;").all(message.guild.id);
+
+    for (let data of top10) {
+      if (!client.users.get(data.user)) continue;
+
+      leaderboardEmbed.addField(`${message.guild.members.get(client.users.get(data.user).id).displayName}`, `${data.points} points, level ${data.level}`);
+
+    }
+    //message ID 625360059785936926
+    leaderboardChannel.fetchMessages({around: "625360059785936926", limit: 1})
+      .then(messages => {
+        const fetchedMsg = messages.first();
+        fetchedMsg.edit(leaderboardEmbed);
+      });
   }
   //z.endFold
   //z.startFold - embed template
@@ -350,19 +375,6 @@ client.on("message", message => {
     }
   }
   //z.endFold
-  //z.startFold - leaderboard
-  else if (command === "leaderboard") {
-    //creates variable equal to an array that lists the top 10 scorers.
-    const top10 = sql.prepare("SELECT * FROM scores WHERE guild = ? ORDER BY points DESC LIMIT 10;").all(message.guild.id);
-
-    embed.setAuthor("Top 10 Scoring Players!", client.user.avatarURL);
-
-    for (let data of top10) {
-      if (!client.users.get(data.user)) continue;
-      embed.addField(`${message.guild.members.get(client.users.get(data.user).id).displayName}`, `${data.points} points, level ${data.level}`);
-    }
-  }
-  //z.endFold
   //z.startFold - ping
   else if (command === "ping") {
 
@@ -488,6 +500,7 @@ client.on("message", message => {
         addTeamPoints(teamMembers, pointsToAdd);
         embed.addField(`${message.guild.roles.get(args[0].slice(3, 21)).name} has been given ${pointsToAdd} points!`, "z.leaderboard to see the top scorers!");
         message.channel.send(embed).catch(console.error);
+        leaderboard();
         return;
       }
       //player
@@ -508,6 +521,7 @@ client.on("message", message => {
 
         embed.addField(`${message.guild.members.get(user.id).displayName} has been given ${pointsToAdd} and currently stands at:`, `Points: ${userscore.points}\nLevel: ${userscore.level}`);
         message.channel.send(embed).catch(console.error);
+        leaderboard();
         return;
       }
       else {
@@ -647,4 +661,4 @@ client.on("message", message => {
 
 });
 
-client.login(process.env.TOKEN);
+//client.login(process.env.TOKEN);
