@@ -45,8 +45,9 @@ client.on("ready",() => {
   }
 
   //prepared to get and store point data
+  client.addColumn = sql.prepare("ALTER TABLE scores ADD COLUMN activityLevel INTEGER");
   client.getScore = sql.prepare("SELECT * FROM scores WHERE user = ? AND guild = ?");
-  client.setScore = sql.prepare("INSERT OR REPLACE INTO scores (id, user, guild, points, level) VALUES (@id, @user, @guild, @points, @level, @activityLevel);");
+  client.setScore = sql.prepare("INSERT OR REPLACE INTO scores (id, user, guild, points, level) VALUES (@id, @user, @guild, @points, @level);");
 });
 
 client.on("guildMemberAdd", (member) => {
@@ -88,7 +89,7 @@ client.on("message", message => {
   //z.startFold - SQL
   score = client.getScore.get(message.author.id, message.guild.id);
   if (!score) {
-    score = { id: `${message.guild.id}-${message.author.id}`, user: message.author.id, guild: message.guild.id, points: 0, level: 1, activityLevel: 0};
+    score = { id: `${message.guild.id}-${message.author.id}`, user: message.author.id, guild: message.guild.id, points: 0, level: 1};
   }
   score.activityLevel++;
   const curLevel = Math.floor(0.1 * Math.sqrt(score.points));
@@ -124,13 +125,13 @@ client.on("message", message => {
   //z.startFold - leaderboard
   function leaderboard() {
     let leaderboardEmbed = new Discord.RichEmbed().setColor(0x000000)
-      .setAuthor("Top 10 Scoring Players!", client.user.avatarURL);
+    .setAuthor("Top 10 Scoring Players!", client.user.avatarURL);
     //creates variable equal to an array that lists the top 10 scorers.
     const top10 = sql.prepare("SELECT * FROM scores WHERE guild = ? ORDER BY points DESC LIMIT 10;").all(message.guild.id);
 
     for (let data of top10) {
       if (!client.users.get(data.user)) continue;
-      leaderboardEmbed.addField(`${message.guild.members.get(client.users.get(data.user).id).displayName}`, `${data.points} points, level ${data.level}, Level of activity ${data.activityLevel}`);
+      leaderboardEmbed.addField(`${message.guild.members.get(client.users.get(data.user).id).displayName}`, `${data.points} points, level ${data.level}`);
     }
     //message ID 625360059785936926
     leaderboardChannel.fetchMessages({around: "625360059785936926", limit: 1})
@@ -436,7 +437,6 @@ client.on("message", message => {
         addTeamPoints(teamMembers);
         embed.addField(`${message.guild.roles.get(args[0].slice(3, 21)).name} has had their points cleared!`, "z.leaderboard to see the top scorers!");
         message.channel.send(embed).catch(console.error);
-        leaderboard();
         return;
       }
       //player
@@ -454,7 +454,6 @@ client.on("message", message => {
 
         embed.addField(`${message.guild.members.get(user.id).displayName} has had their points cleared and currently stands at:`, `Points: ${userscore.points}\nLevel: ${userscore.level}`);
         message.channel.send(embed).catch(console.error);
-        leaderboard();
         return;
       }
       else {
@@ -491,14 +490,13 @@ client.on("message", message => {
               userscore = { id: `${message.guild.id}-${member.id}`, user: member.id, guild: message.guild.id, points: 0, level: 1 };
             }
             userscore.points += pointsToAdd;
-            userscore.level = Math.floor(0.1 * Math.sqrt(userscore.points + pointsToAdd));
             client.setScore.run(userscore);
           }
         });
 
         let teamMembers = message.guild.roles.get(args[0].slice(3, 21)).members.map(m => m.user);
         addTeamPoints(teamMembers, pointsToAdd);
-        embed.addField(`${message.guild.roles.get(args[0].slice(3, 21)).name} has been given ${pointsToAdd} points!`, "Look at #leaderboard to see the top scorers!");
+        embed.addField(`${message.guild.roles.get(args[0].slice(3, 21)).name} has been given ${pointsToAdd} points!`, "z.leaderboard to see the top scorers!");
         message.channel.send(embed).catch(console.error);
         leaderboard();
         return;
@@ -517,7 +515,6 @@ client.on("message", message => {
           userscore = { id: `${message.guild.id}-${user.id}`, user: user.id, guild: message.guild.id, points: 0, level: 1 };
         }
         userscore.points += pointsToAdd;
-        userscore.level = Math.floor(0.1 * Math.sqrt(userscore.points + pointsToAdd));
         client.setScore.run(userscore);
 
         embed.addField(`${message.guild.members.get(user.id).displayName} has been given ${pointsToAdd} and currently stands at:`, `Points: ${userscore.points}\nLevel: ${userscore.level}`);
@@ -595,7 +592,7 @@ client.on("message", message => {
               userscore = { id: `${message.guild.id}-${member.id}`, user: member.id, guild: message.guild.id, points: 0, level: 1 };
             }
             userscore.points = args[1];
-            userscore.level = Math.floor(0.1 * Math.sqrt(args[1]));
+            userscore.level = args[2];
             client.setScore.run(userscore);
           }
         });
@@ -604,7 +601,6 @@ client.on("message", message => {
         addTeamPoints(teamMembers);
         embed.addField(`${message.guild.roles.get(args[0].slice(3, 21)).name} has had their points set to ${args[1]} and their level to ${args[2]}!`, "z.leaderboard to see the top scorers!");
         message.channel.send(embed).catch(console.error);
-        leaderboard();
         return;
       }
       //player
@@ -616,13 +612,12 @@ client.on("message", message => {
         }
 
         userscore.points = args[1];
-        userscore.level = Math.floor(0.1 * Math.sqrt(args[1]));
+        userscore.level = args[2];
 
         client.setScore.run(userscore);
 
         embed.addField(`${message.guild.members.get(user.id).displayName} has had their points cleared and currently stands at:`, `Points: ${userscore.points}\nLevel: ${userscore.level}`);
         message.channel.send(embed).catch(console.error);
-        leaderboard();
         return;
       }
       else {
@@ -664,4 +659,4 @@ client.on("message", message => {
 
 });
 
-client.login(process.env.TOKEN);
+//client.login(process.env.TOKEN);
