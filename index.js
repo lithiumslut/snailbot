@@ -130,7 +130,9 @@ client.on("message", message => {
 
     for (let data of top10) {
       if (!client.users.get(data.user)) continue;
+
       leaderboardEmbed.addField(`${message.guild.members.get(client.users.get(data.user).id).displayName}`, `${data.points} points, level ${data.level}, Level of activity ${data.activityLevel}`);
+
     }
     //message ID 625360059785936926
     leaderboardChannel.fetchMessages({around: "625360059785936926", limit: 1})
