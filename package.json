@@ -14,8 +14,8 @@
   "dependencies": {
     "express": "^4.16.4",
     "discord.js": "^11.5.1",
-    "better-sqlite3": "^5.4.2",
-    "node-gyp": "^5.0.3"
+    "better-sqlite3": "^5.4.3",
+    "node-gyp": "^5.0.4"
   },
   "repository": {
     "url": "https://glitch.com/edit/#!/hello-sqlite"
