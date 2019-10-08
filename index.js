@@ -14,7 +14,6 @@ setInterval(() => {
 }, 280000);
 //z.endFold
 
-
 //meat of the bot
 //z.startFold - require documents
 const Discord = require("discord.js");
@@ -45,9 +44,8 @@ client.on("ready",() => {
   }
 
   //prepared to get and store point data
-  client.addColumn = sql.prepare("ALTER TABLE scores ADD COLUMN activityLevel INTEGER");
   client.getScore = sql.prepare("SELECT * FROM scores WHERE user = ? AND guild = ?");
-  client.setScore = sql.prepare("INSERT OR REPLACE INTO scores (id, user, guild, points, level) VALUES (@id, @user, @guild, @points, @level);");
+  client.setScore = sql.prepare("INSERT OR REPLACE INTO scores (id, user, guild, points, level, activityLevel) VALUES (@id, @user, @guild, @points, @level, @activityLevel);");
 });
 
 client.on("guildMemberAdd", (member) => {
@@ -69,7 +67,7 @@ client.on("guildMemberAdd", (member) => {
 
 client.on("message", message => {
   //z.startFold - user filter
-  if (!message.content.startsWith(prefix)|| message.author === client.user || message.author.bot || !message.guild) return;
+  if (message.author === client.user || message.author.bot || !message.guild) return;
   //z.endFold
   //z.startFold - define things
   const modRoles = message.guild.roles.get("599162538541711361").id;
@@ -97,6 +95,7 @@ client.on("message", message => {
     score.level++;
   }
   client.setScore.run(score);
+  leaderboard();
   //z.endFold
   //z.startFold - get mentions
   function getMention(mention) {
@@ -122,18 +121,18 @@ client.on("message", message => {
     } //channels
   }
   //z.endFold
-  //z.startFold - leaderboard
+  //z.startFold - leaderboards
   function leaderboard() {
     let leaderboardEmbed = new Discord.RichEmbed().setColor(0x000000)
-    .setAuthor("Top 10 Scoring Players!", client.user.avatarURL);
+      .setAuthor("Top 20 Scoring Players!", client.user.avatarURL);
     //creates variable equal to an array that lists the top 10 scorers.
-    const top10 = sql.prepare("SELECT * FROM scores WHERE guild = ? ORDER BY points DESC LIMIT 10;").all(message.guild.id);
+    const top10 = sql.prepare("SELECT * FROM scores WHERE guild = ? ORDER BY points DESC LIMIT 20;").all(message.guild.id);
 
+    let number = 1;
     for (let data of top10) {
       if (!client.users.get(data.user)) continue;
-
-      leaderboardEmbed.addField(`${message.guild.members.get(client.users.get(data.user).id).displayName}`, `${data.points} points, level ${data.level}`);
-
+      leaderboardEmbed.addField(`${number}. ${message.guild.members.get(client.users.get(data.user).id).displayName}`,  `**${data.points} points** | **Level ${data.level}** | **${data.activityLevel} activity points**`);
+      number++;
     }
     //message ID 625360059785936926
     leaderboardChannel.fetchMessages({around: "625360059785936926", limit: 1})
@@ -149,6 +148,7 @@ client.on("message", message => {
   //commands
   //z.startFold - commands
   //z.startFold - help
+  if (!message.content.startsWith(prefix)) return;
   if (command === "help" ) {
 
 
@@ -246,8 +246,8 @@ client.on("message", message => {
   else if (command === "info") {
 
     let channel = args[0];
-    const onlineEmoji = client.emojis.find(emoji => emoji.name === "online");
-    const offlineEmoji = client.emojis.find(emoji => emoji.name === "offline");
+    const onlineEmoji = client.emojis.get("627606718205001738");
+    const offlineEmoji = client.emojis.get("627606718091755539");
     const alectoEmoji = client.emojis.find(emoji => emoji.name === "coinAlecto");
     const megaEmoji = client.emojis.find(emoji => emoji.name === "coinMegaera");
     const tisiEmoji = client.emojis.find(emoji => emoji.name === "coinTisiphone");
@@ -389,22 +389,33 @@ client.on("message", message => {
 
     const user = getMention(args[0]);
     if (!user) {
-      embed.addField("Your current points and level are:", `Points: ${score.points}\nLevel: ${score.level}`);
+      embed.addField("Your current standing is", `Points: ${score.points}\nLevel: ${score.level}\nActivity Level: ${score.activityLevel}`);
     }
     else if (client.users.has(args[0].slice(3, 21)) || client.users.has(args[0].slice(2, 20))) {
 
       let userscore = client.getScore.get(user.id, message.guild.id);
       if (!userscore) {
-        userscore = { id: `${message.guild.id}-${user.id}`, user: user.id, guild: message.guild.id, points: 0, level: 1 };
+        userscore = { id: `${message.guild.id}-${user.id}`, user: user.id, guild: message.guild.id, points: 0, level: 1, activityLevel: 0 };
       }
 
       client.setScore.run(userscore);
 
-      embed.addField(`${message.guild.members.get(user.id).displayName} currently stands at:`, `Points: ${userscore.points}\nLevel: ${userscore.level}`);
+      embed.addField(`${message.guild.members.get(user.id).displayName} currently stands at:`, `Points: ${userscore.points}\nLevel: ${userscore.level}\nActivity Level: ${userscore.activityLevel}`);
     }
     else {
       embed.addField("z.points is broken!", "<@!308224063950553088> plz fix");
     }
+  }
+  //z.endFold
+  //z.startFold - gamelist
+  else if (command === "gamelist") {
+    embed
+      .setAuthor(client.user.username, client.user.avatarURL)
+      .addField("Puzzle Games", "[Golf Peaks](https://mega.nz/#!m2BWCKDS!CWWTzuQGmHf42je3Ogwbcvp2atgTajEX_LGc35EWjdA)\n[The Witness](https://mega.nz/#!HW5DwIZI!42_FgSZH6x6tMZuW6lupE5r7JWCER2GOuq-p9GCZLDM)\n[Human Resource Machine](https://drive.google.com/uc?id=1EFyL9Ui4bvlRK_D14VcySKPRWODubndg&export=download)\n[7 Billion Humans](https://drive.google.com/uc?id=1zvN2-F6InXNqV6VlmA1SdNlw5VW1lFPY&export=download)\n[SpaceChem](https://drive.google.com/file/d/1BV0iuUQ5AiWYFoXArmJtOZXSpkps_R5h/view)\n[Portal Stories: Mel](https://store.steampowered.com/app/317400/Portal_Stories_Mel/)\n The Talos Principle\n^ [Part 1](https://mega.nz/#!Dz4VRJCb!dobjqlHafA2w7NZafGpR35-2dBKkC7jqiBiDIRy-8GU) ^ [Part 2](https://mega.nz/#!zyIFBRLY!mysV_Ak3NvKpPbY_kWdHT2Wx-TQDhv1pZxzH7oNCQIs) ^ [Part 3](https://mega.nz/#!S75WHDoD!473oQcUUDTnIRGBk6-eeuZL6MZ8xltgdlSna6lOMiPo) ^")
+      .addField("Dating Sims", "[I Love You, Colonel Sanders](https://store.steampowered.com/app/1121910/I_Love_You_Colonel_Sanders_A_Finger_Lickin_Good_Dating_Simulator/)")
+      .addField("Platformers", "[Celeste](https://mega.nz/#!R6IEwSpL!n34RtXEHNTK4mt3L-lco6RKOfPuRmkFrHp4Bv0XjTP8)\n[The End is Nigh](https://mega.nz/#!tVMEyA6J!cPhCag7AANld5KyFvRUxSnlZA41JCCnEXwAcT9EFYnE)")
+      .addField("Precision/Skill Games", "[Super Hexagon](https://docs.google.com/uc?id=0Bx62zZHabYj6TE5pNk9hSm5yZms)\n[Just Shapes and Beats](https://mega.nz/#!Th8xRKzB!VzDZD0U6UnEZM0hILshNiAr3O5guugvV4aR_PNB_Mls)\nCrypt of the Necrodancer\n^ [Part 1](https://mega.nz/#!jn53GT7I!LRidYUkUzE_KVuuq4kZknCkryS0ybNFOsPpfU44NZ0w) ^ [Part 2](https://mega.nz/#!Ovxz3JqK!ehAfnuPpO0PJpKXCCUKnv3h33V_PxXtL38E-MIYkV0c) ^")
+      .addField("Exploration Games", "[Falcon Age](https://mega.nz/#!jxMTwAoA!PuYtw4AwJPujVhJu0PY3zlAnCs0UlILxe7Z47uUfan8)\n[Sunless Skies](https://mega.nz/#!3192jQTa!xkMk4Ve40hjyog6BwugqPQ_1axiMngYRTHQ6GA7qk8Q)\n[Untitled Goose Game](https://mega.nz/#!lgAADA7b!dp6lOIw3gLqs7WMFSZythiEa6YtqDNQLu8kEy2RE4Ys)\n[Little Inferno](https://drive.google.com/uc?id=136Qk3drnQJ57-JKvo5QS2oFKV5aqnqu9&export=download)");
   }
   //z.endFold
   //mod commands start here
@@ -427,7 +438,7 @@ client.on("message", message => {
           for (const member of teamMembers) {
             let userscore = client.getScore.get(member.id, message.guild.id);
             if (!userscore) {
-              userscore = { id: `${message.guild.id}-${member.id}`, user: member.id, guild: message.guild.id, points: 0, level: 1 };
+              userscore = { id: `${message.guild.id}-${member.id}`, user: member.id, guild: message.guild.id, points: 0, level: 1, activityLevel: 0 };
             }
             userscore.points = 0;
             userscore.level = 1;
@@ -446,7 +457,7 @@ client.on("message", message => {
 
         let userscore = client.getScore.get(user.id, message.guild.id);
         if (!userscore) {
-          userscore = { id: `${message.guild.id}-${user.id}`, user: user.id, guild: message.guild.id, points: 0, level: 1 };
+          userscore = { id: `${message.guild.id}-${user.id}`, user: user.id, guild: message.guild.id, points: 0, level: 1, activityLevel: 0 };
         }
 
         userscore.points = 0;
@@ -489,7 +500,7 @@ client.on("message", message => {
           for (const member of teamMembers) {
             let userscore = client.getScore.get(member.id, message.guild.id);
             if (!userscore) {
-              userscore = { id: `${message.guild.id}-${member.id}`, user: member.id, guild: message.guild.id, points: 0, level: 1 };
+              userscore = { id: `${message.guild.id}-${member.id}`, user: member.id, guild: message.guild.id, points: 0, level: 1, activityLevel: 0 };
             }
             userscore.points += pointsToAdd;
             client.setScore.run(userscore);
@@ -514,7 +525,7 @@ client.on("message", message => {
           return;
         }
         else if (!userscore) {
-          userscore = { id: `${message.guild.id}-${user.id}`, user: user.id, guild: message.guild.id, points: 0, level: 1 };
+          userscore = { id: `${message.guild.id}-${user.id}`, user: user.id, guild: message.guild.id, points: 0, level: 1, activityLevel: 0 };
         }
         userscore.points += pointsToAdd;
         client.setScore.run(userscore);
@@ -591,7 +602,7 @@ client.on("message", message => {
           for (const member of teamMembers) {
             let userscore = client.getScore.get(member.id, message.guild.id);
             if (!userscore) {
-              userscore = { id: `${message.guild.id}-${member.id}`, user: member.id, guild: message.guild.id, points: 0, level: 1 };
+              userscore = { id: `${message.guild.id}-${member.id}`, user: member.id, guild: message.guild.id, points: 0, level: 1, activityLevel: 0 };
             }
             userscore.points = args[1];
             userscore.level = args[2];
@@ -610,7 +621,7 @@ client.on("message", message => {
 
         let userscore = client.getScore.get(user.id, message.guild.id);
         if (!userscore) {
-          userscore = { id: `${message.guild.id}-${user.id}`, user: user.id, guild: message.guild.id, points: 0, level: 1 };
+          userscore = { id: `${message.guild.id}-${user.id}`, user: user.id, guild: message.guild.id, points: 0, level: 1, activityLevel: 0 };
         }
 
         userscore.points = args[1];
@@ -661,4 +672,4 @@ client.on("message", message => {
 
 });
 
-//client.login(process.env.TOKEN);
+client.login(process.env.TOKEN);
