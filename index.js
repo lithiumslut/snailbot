@@ -33,9 +33,9 @@ client.on("ready",() => {
 
   //sql shit
   //check if table already exists
-  const table = sql.prepare("SELECT count(*) FROM sqlite_master WHERE type='table' AND name = 'scores';").get();
+  const scoreTable = sql.prepare("SELECT count(*) FROM sqlite_master WHERE type='table' AND name = 'scores';").get();
   const configTable = sql.prepare("SELECT count(*) FROM sqlite_master WHERE type='table' AND name = 'config';").get();
-  if (!table["count(*)"]) {
+  if (!scoreTable["count(*)"]) {
     //If the table ain't there, create it and set it up properly
     sql.prepare("CREATE TABLE scores (id TEXT PRIMARY KEY, user TEXT, guild TEXT, points INTEGER, level INTEGER, activityLevel INTEGER);").run();
     //make sure the row ID is always unique and unindexed
@@ -56,6 +56,7 @@ client.on("ready",() => {
   client.setScore = sql.prepare("INSERT OR REPLACE INTO scores (id, user, guild, points, level, activityLevel) VALUES (@id, @user, @guild, @points, @level, @activityLevel);");
 
   client.settingAdd = sql.prepare("INSERT OR REPLACE INTO config (name, user, value) VALUES (@name, @user, @value);");
+  client.settingGet = sql.prepare("SELECT * FROM config WHERE name = ?")
 });
 
 client.on("guildMemberAdd", (member) => {
@@ -249,19 +250,6 @@ client.on("message", message => {
     }
     message.member.send(embed);
     message.channel.send(dmSent).then(msg => {msg.delete(5000);}).catch(console.error);
-    return;
-  }
-  //z.endFold
-  //z.startFold - add config
-  else if (command === "configadd" && message.member.roles.has(modRoles)) {
-    const name = args[0];
-    args.shift();
-    const value = args.join(" ");
-
-    const configSettings = { name: name, user: message.author.id, value: value };
-    message.channel.send(`Name: ${name}\nSubmitted by: ${message.author.id}\nValue: ${value}`);
-    client.settingAdd.run(configSettings);
-
     return;
   }
   //z.endFold
@@ -496,6 +484,26 @@ client.on("message", message => {
         embed.addField("z.clearpoints is broken", "<@!308224063950553088> plz fix");
       }
     }
+  }
+  //z.endFold
+  //z.startFold - configAdd
+  else if (command === "configadd" && message.member.roles.has(modRoles)) {
+    const name = args[0];
+    args.shift();
+    const value = args.join(" ");
+
+    const configSettings = { name: name, user: message.author.id, value: value };
+    message.channel.send(`Name: ${name}\nSubmitted by: ${message.author.id}\nValue: ${value}`);
+    client.settingAdd.run(configSettings);
+
+    return;
+  }
+  //z.endFold
+  //z.startFold - configGet
+  else if (command === "configget") {
+    const setting = client.settingGet.get(args[0]);
+    message.channel.send(`Setting: ${setting.name}\nValue: ${setting.value}\nSubmitted by: ${setting.user}`);
+    return;
   }
   //z.endFold
   //z.startFold - givepoints
