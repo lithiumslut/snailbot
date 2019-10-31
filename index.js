@@ -19,12 +19,10 @@ setInterval(() => {
 const Discord = require("discord.js");
 const SQLite = require("better-sqlite3");
 const sql = new SQLite("./main.sqlite");
-const config = require("./config.json");
 //z.endFold
 //z.startFold - define client, date, prefix, and score
 const client = new Discord.Client();
 var date = new Date();
-var prefix = config.prefix;
 let score;
 //z.endFold
 
@@ -35,6 +33,7 @@ client.on("ready",() => {
   //check if table already exists
   const scoreTable = sql.prepare("SELECT count(*) FROM sqlite_master WHERE type='table' AND name = 'scores';").get();
   const configTable = sql.prepare("SELECT count(*) FROM sqlite_master WHERE type='table' AND name = 'config';").get();
+  const commandTable = sql.prepare("SELECT count(*) FROM sqlite_master WHERE type='table' AND name = 'command';").get();
   if (!scoreTable["count(*)"]) {
     //If the table ain't there, create it and set it up properly
     sql.prepare("CREATE TABLE scores (id TEXT PRIMARY KEY, user TEXT, guild TEXT, points INTEGER, level INTEGER, activityLevel INTEGER);").run();
@@ -50,13 +49,25 @@ client.on("ready",() => {
     sql.pragma("synchronous = 1");
     sql.pragma("journal_mode = wal");
   }
+  if (!commandTable["count(*)"]) {
+    sql.prepare("CREATE TABLE command (name TEXT PRIMARY KEY, perms TEXT, desc TEXT, params TEXT);").run();
+
+    sql.prepare("CREATE UNIQUE INDEX idx_command_name ON command (name);").run();
+    sql.pragma("synchronous = 1");
+    sql.pragma("journal_mode = wal");
+  }
 
   //prepared to get and store point data
   client.getScore = sql.prepare("SELECT * FROM scores WHERE user = ? AND guild = ?");
   client.setScore = sql.prepare("INSERT OR REPLACE INTO scores (id, user, guild, points, level, activityLevel) VALUES (@id, @user, @guild, @points, @level, @activityLevel);");
 
-  client.settingAdd = sql.prepare("INSERT OR REPLACE INTO config (name, user, value) VALUES (@name, @user, @value);");
   client.settingGet = sql.prepare("SELECT * FROM config WHERE name = ?")
+  client.settingAdd = sql.prepare("INSERT OR REPLACE INTO config (name, user, value) VALUES (@name, @user, @value);");
+
+  client.getCommands = sql.prepare("SELECT * FROM command")
+  client.getCommand = sql.prepare("SELECT * FROM command WHERE name = ?")
+  client.setCommand = sql.prepare("INSERT OR REPLACE INTO command (name, perms, desc, params) VALUES (@name, @perms, @desc, @params);");
+  client.delCommand = sql.prepare("DELETE FROM command WHERE name = @name");
 });
 
 client.on("guildMemberAdd", (member) => {
@@ -85,13 +96,18 @@ client.on("message", message => {
   const pokeRole = message.guild.roles.get("615371237970935809");
   const pornRole = message.guild.roles.get("616736785682399248");
   const muteRole = message.guild.roles.get("615598648931123200");
+  const bruhRole = message.guild.roles.get("634051430751404032");
 
   const leaderboardChannel = client.channels.get("625359487141937154");
+  const bruhChannel = client.channels.get("634051604949106688");
+  const prefix = client.settingGet.get("prefix").value;
+  
+  if (message.channel === bruhChannel && !message.content.toLowerCase().replace(/\s+/g, '').includes("bruh")) message.delete();
   //z.endFold
   //z.startFold - defining arguments
   //argument variables
   //slice removes prefix, trim any whitespace surrounding the command, split the string beteen spaces of any amount.
-  const args = message.content.slice(config.prefix.length).trim().split(/ +/g);
+  const args = message.content.slice(prefix.length).trim().split(/ +/g);
   //shift removes the first entry of the array, changing the value of the array as well
   const command = args.shift().toLowerCase();
   //z.endFold
@@ -160,7 +176,39 @@ client.on("message", message => {
   //z.startFold - commands
   //z.startFold - help
   if (!message.content.startsWith(prefix)) return;
-  if (command === "help" ) {
+  if (command === "help2") {
+    const dmSent = new Discord.RichEmbed().setAuthor("Help", client.user.avatarURL).setColor(0x000000).addField("DM Sent!", "You've been sent a DM that lists the commands!");
+    embed.setAuthor("Command Help", client.user.avatarURL);
+    if (args.length === 0) {
+      const cmdList = client.getCommands.all();
+
+      let desc = "";
+      for (let info = 0; info < cmdList.length; info++) {
+        if (cmdList[info].perms === "mod" && !message.member.roles.has(modRoles)) continue;
+        desc += `\n**${prefix}${cmdList[info].name}**\n${cmdList[info].desc}\n`;
+      }
+      embed.setDescription(desc);
+    } else {
+      const cmd = client.getCommand.get(args[0])
+      if (!cmd || (cmd.perms === "mod" && !message.member.roles.has(modRoles))) {
+        embed.setAuthor("Error", client.user.avatarURL)
+          .addField("Whoa there!", `That's not a command! Use ${prefix}help for a list of commands!`);
+        message.channel.send(embed).then(msg => {
+          msg.delete(5000);
+        }).catch(console.error);
+        return;
+      } else {
+        embed.addField(`**${prefix}${cmd.name}**`, cmd.desc)
+             .addField("Usage", `${prefix}${cmd.name} ${cmd.params}`);
+      }
+    }
+    // TODO: Send dm, rename to help, remove old help
+    //message.member.send(embed);
+    message.channel.send(embed);
+    //message.channel.send(dmSent).then(msg => {msg.delete(5000);}).catch(console.error);
+    return;
+  }
+  else if (command === "help" ) {
 
 
     const dmSent = new Discord.RichEmbed().setAuthor("Help", client.user.avatarURL).setColor(0x000000).addField("DM Sent!", "You've been sent a DM that lists the commands!");
@@ -493,17 +541,64 @@ client.on("message", message => {
     const value = args.join(" ");
 
     const configSettings = { name: name, user: message.author.id, value: value };
-    message.channel.send(`Name: ${name}\nSubmitted by: ${message.author.id}\nValue: ${value}`);
     client.settingAdd.run(configSettings);
 
+    embed.setColor(0x000000)
+    .setAuthor(client.user.username, client.user.avatarURL)
+    .setDescription(`Setting: ${configSettings.name}\nValue: ${configSettings.value}`)
+    .setFooter(`Submitted by: ${message.author.tag} (${message.author.id})`, message.author.avatarURL);
+
+    message.channel.send(embed).catch(console.error);
     return;
   }
   //z.endFold
   //z.startFold - configGet
-  else if (command === "configget") {
+  else if (command === "configget" && message.member.roles.has(modRoles)) {
+
     const setting = client.settingGet.get(args[0]);
-    message.channel.send(`Setting: ${setting.name}\nValue: ${setting.value}\nSubmitted by: ${setting.user}`);
+
+    embed.setColor(0x000000)
+    .setAuthor(client.user.username, client.user.avatarURL)
+    .setDescription(`Setting: ${setting.name}\nValue: ${setting.value}`)
+    .setFooter(`Submitted by: ${client.users.get(setting.user).tag} (${setting.user})`, message.author.avatarURL);
+
+    message.channel.send(embed).catch(console.error);
     return;
+  }
+else if (command === "sethelp"  && message.member.roles.has(modRoles)) {
+      //name, perms, desc, params
+      const name = args[0];
+      let perms = "";
+      let desc = "";
+      let params = "";
+      if (args.length < 4) {
+        client.delCommand.run({
+          name: name
+        });
+        message.channel.send(`Deleted command: ${name}`);
+        return;
+      } else if (args.length === 4) {
+        perms = args[1];
+        desc = args[2];
+        params = args[3];
+      } else {
+        var args2 = [];
+        args.join(" ").match(new RegExp('"[^"]+"|[\\S]+', 'g')).forEach(element => {
+          if (!element) return;
+          return args2.push(element.replace(/"/g, ''));
+        });
+        perms = args2[1];
+        desc = args2[2];
+        params = args2[3];
+      }
+      client.setCommand.run({
+        name: name,
+        perms: perms,
+        desc: desc,
+        params: params
+      });
+      message.channel.send(`Name: ${name}\nPerms: ${perms}\nDesc: ${desc}\nParams: ${params}`);
+      return;
   }
   //z.endFold
   //z.startFold - givepoints
@@ -530,10 +625,11 @@ client.on("message", message => {
         const addTeamPoints = sql.transaction((teamMembers, pointsToAdd) => {
           for (const member of teamMembers) {
             let userscore = client.getScore.get(member.id, message.guild.id);
+            let finalPoints = pointsToAdd + Math.floor(userscore.activityLevel * 0.05)
             if (!userscore) {
               userscore = { id: `${message.guild.id}-${member.id}`, user: member.id, guild: message.guild.id, points: 0, level: 1, activityLevel: 0 };
             }
-            userscore.points += pointsToAdd;
+            userscore.points += finalPoints;
             client.setScore.run(userscore);
           }
         });
@@ -548,7 +644,8 @@ client.on("message", message => {
       //player
       else if (client.users.has(args[0].slice(3, 21)) || client.users.has(args[0].slice(2, 20))) {
         let userscore = client.getScore.get(user.id, message.guild.id);
-        const pointsToAdd = parseInt(args[1], [10]);
+        const pointsToAdd = parseInt(args[1]);
+        const finalPoints = pointsToAdd + Math.floor(userscore.activityLevel * 0.05);
 
         if(!pointsToAdd) {
           embed.addField("Error", "Please provide how many points to add.");
@@ -558,7 +655,7 @@ client.on("message", message => {
         else if (!userscore) {
           userscore = { id: `${message.guild.id}-${user.id}`, user: user.id, guild: message.guild.id, points: 0, level: 1, activityLevel: 0 };
         }
-        userscore.points += pointsToAdd;
+        userscore.points += finalPoints;
         client.setScore.run(userscore);
 
         embed.addField(`${message.guild.members.get(user.id).displayName} has been given ${pointsToAdd} and currently stands at:`, `Points: ${userscore.points}\nLevel: ${userscore.level}`);
@@ -680,11 +777,30 @@ client.on("message", message => {
     return;
   }
   //z.endFold
+  //z.startFold - bruh
+  else if (command === "bruh") {
+
+
+    embed.setAuthor("Join bruh", message.author.avatarURL);
+
+    if (message.member.roles.has(bruhRole.id)) {
+      message.member.removeRole(bruhRole).catch(console.error);
+      embed.addField("Success!", "You've left the bruh channel!");
+    }
+    else if (!message.member.roles.has(bruhRole.id)) {
+      message.member.addRole(bruhRole).catch(console.error);
+      embed.addField("Success!", "Welcome to the bruh channel!");
+    }
+    else {
+      embed.addField("z.bruh is broken!", "<@!308224063950553088> plz fix");
+    }
+  }
+  //z.endFold
   //not a command
   else if (message.content.startsWith(prefix)) {
 
     embed.setAuthor("Error", client.user.avatarURL)
-      .addField("Whoa there!", `That's not a command! Use ${prefix} for a list of commands!`);
+      .addField("Whoa there!", `That's not a command! Use ${prefix}help for a list of commands!`);
     message.channel.send(embed).then(msg => {msg.delete(5000);}).catch(console.error); //https://discord.js.org/#/docs/main/stable/class/Message?scrollTo=delete
     return;
   }
